@@ -94,9 +94,13 @@ python train.py --data D:\more-sessions
 python train.py --test multimodal_15
 python train.py --loso
 python train.py --self-test
+python infer.py
+python infer.py runs\RUN\model.onnx
 ```
 
 `--qc-only` writes the channel table and does not train. `--pose` trains the hand-pose regressor instead of the classifier and writes `pose.onnx` beside the other artifacts. `--self-test` trains for one epoch on synthetic tensors and checks that the ONNX file loads. It does not read `data/raw/`.
+
+`infer.py` is the classifier caller. It loads `model.onnx`, runs a mock 1 s buffer through the same causal filter and per-channel scale as training, and prints class probabilities. Filter, scale, and the 0.5 s warmup are not in the graph. Copy this file; do not feed raw microvolts to ONNX. With no path it uses `runs/latest.txt` if that run has `model.onnx`, otherwise the newest `runs/*/model.onnx`.
 
 ## Run artifacts
 
@@ -131,8 +135,11 @@ Each training writes `runs/<timestamp>/`. `runs/latest.txt` stores that path.
 | Channel mask | Zeroed inside the graph. See `channel_keep` |
 
 ```powershell
-.\.venv\Scripts\python.exe -c "import numpy as np, onnxruntime as ort; s=ort.InferenceSession(r'runs\RUN\model.onnx', providers=['CPUExecutionProvider']); p=s.run(None, {'emg': np.zeros((1,250,8), np.float32)})[0]; print(p.shape, float(p.sum()))"
+python infer.py
+python infer.py runs\RUN\model.onnx
 ```
+
+The mock buffer is synthetic EMG in microvolts. Scale is computed on that 1 s window; training uses the full recording. A live caller should keep SOS filter state across hops instead of re-applying the 0.5 s warmup every window.
 
 ## Pose inference contract
 
@@ -152,6 +159,7 @@ Each training writes `runs/<timestamp>/`. `runs/latest.txt` stores that path.
 ```
 config.yaml          training and split configuration
 train.py             entry point
+infer.py             one-window ONNX caller (filter and scale outside the graph)
 aura_pipeline/       load, QC, windows, model, fit, export, pose
 data/raw/            session files
 runs/                outputs, gitignored
