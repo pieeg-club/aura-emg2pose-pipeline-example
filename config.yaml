@@ -54,3 +54,19 @@ train_sessions: []
 val_sessions: []
 test_sessions: []
 loso: false
+
+# Continuous hand-pose regression (python train.py --pose). Parallel to the classifier.
+# Target is the optical hand tracker carried in the session file, not motion capture.
+# Each DoF is already scaled to [0, 1]; the model head is a sigmoid.
+pose_targets:
+  - thumb_curl
+  - index_curl
+  - middle_curl
+  - ring_curl
+  - pinky_curl
+  - pinch
+  - openness
+# Drop a window whose median optical confidence is below this.
+pose_min_conf: 0.3
+# SmoothL1 transition point, in target units.
+pose_loss_beta: 0.1

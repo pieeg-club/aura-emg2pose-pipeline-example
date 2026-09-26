@@ -26,6 +26,7 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--qc-only", action="store_true", help="Channel report only. No training.")
     p.add_argument("--self-test", action="store_true", help="Train on synthetic EMG and export ONNX.")
     p.add_argument("--loso", action="store_true", help="Also score leave-one-session-out. Slow.")
+    p.add_argument("--pose", action="store_true", help="Train continuous hand-pose regression, not the classifier.")
     p.add_argument("--epochs", type=int, default=None)
     p.add_argument("--test", action="append", default=None, help="Pin a session into the test split. Repeatable.")
     return p.parse_args(argv)
@@ -157,8 +158,8 @@ def main(argv: list[str] | None = None) -> int:
 
     by_name = {s.name: s for s in sessions if s.name}
     split = assign_sessions([s.name for s in sessions], cfg)
-    # Channel mask is fit on train and val only. Test must not decide which channels exist.
-    mask = global_mask([by_name[n] for n in split["train"] + split["val"] if n in by_name], cfg)
+    # Channel mask is fit on train only. Validation and test must not decide which channels exist.
+    mask = global_mask([by_name[n] for n in split["train"] if n in by_name], cfg)
     write_qc(out / "qc.md", rows, mask)
     (out / "qc.json").write_text(json.dumps({"mask": mask, "rows": rows, "split": split}, indent=2), encoding="utf-8")
     print("channel keep: " + " ".join(f"ch{i+1}" for i, k in enumerate(mask) if k), flush=True)
@@ -167,6 +168,11 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
     (out / "split.json").write_text(json.dumps(split, indent=2), encoding="utf-8")
+
+    if args.pose:
+        from .pose import run_pose
+
+        return run_pose(sessions, cfg, out, split, mask)
 
     xs, ys, names = _windows_by_session(sessions, cfg, mask)
     if not names:
@@ -207,7 +213,8 @@ def main(argv: list[str] | None = None) -> int:
             i = names.index(name)
             others = [names.index(n) for n in pool if n != name]
             tr_x, tr_y = _concat([xs[j] for j in others], [ys[j] for j in others])
-            fold, _ = train_model(tr_x, tr_y, xs[i], ys[i], cfg, mask, epochs=ship_epochs)
+            # The held-out session is scored only. It is not used for early stopping.
+            fold, _ = train_model(tr_x, tr_y, None, None, cfg, mask, epochs=ship_epochs)
             pred = predict(fold, xs[i], int(cfg["batch_size"]), next(fold.parameters()).device)
             score = balanced_accuracy(ys[i], pred, len(cfg["classes"]))
             scores.append({"session": name, "balanced_accuracy": score})

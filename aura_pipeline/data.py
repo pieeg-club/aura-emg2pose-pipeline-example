@@ -17,6 +17,20 @@ LABEL_ALIASES = {
     "thumbs-up": "thumb-up",
     "thumb-up": "thumb-up",
 }
+POSE_DEFAULT = [
+    "thumb_curl",
+    "index_curl",
+    "middle_curl",
+    "ring_curl",
+    "pinky_curl",
+    "pinch",
+    "openness",
+]
+
+
+def pose_target_names(cfg: dict) -> list[str]:
+    names = cfg.get("pose_targets") or POSE_DEFAULT
+    return [str(n) for n in names]
 
 
 @dataclass
@@ -33,6 +47,9 @@ class Session:
     n_raw: int = 0
     n_used: int = 0
     warnings: list[str] = field(default_factory=list)
+    pose: np.ndarray | None = None
+    pose_conf: np.ndarray | None = None
+    pose_names: list[str] = field(default_factory=list)
 
 
 def discover(folder: Path) -> list[Path]:
@@ -66,6 +83,21 @@ def load_table(path: Path) -> pd.DataFrame:
     if path.suffix.lower() == ".csv":
         return pd.read_csv(path)
     return pd.read_excel(path, sheet_name=0)
+
+
+def _pose_arrays(df: pd.DataFrame, names: list[str]) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """Continuous pose target and its per-sample confidence, or (None, None) if absent."""
+    if not names or not all(n in df.columns for n in names):
+        return None, None
+    pose = df[names].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=np.float32)
+    if "optical_conf" in df.columns:
+        conf = pd.to_numeric(df["optical_conf"], errors="coerce").to_numpy(dtype=np.float32)
+    else:
+        conf = np.ones(len(df), dtype=np.float32)
+    if "optical_present" in df.columns:
+        present = pd.to_numeric(df["optical_present"], errors="coerce").to_numpy(dtype=np.float32)
+        conf = conf * np.nan_to_num(present, nan=0.0)
+    return pose, conf
 
 
 def _hard_fail(ch: np.ndarray) -> tuple[bool, str]:
@@ -109,7 +141,7 @@ def load_session(path: Path, cfg: dict) -> Session:
         guided = source == "guided"
         labels = np.where(guided, labels, None)
 
-    if cfg.get("drop_optical_disagreement", True) and "optical_class" in df.columns:
+    if cfg.get("drop_optical_disagreement", False) and "optical_class" in df.columns:
         present = _flag(df["optical_present"] if "optical_present" in df.columns else None, len(df))
         conf = pd.to_numeric(df["optical_conf"], errors="coerce").fillna(0).to_numpy() if "optical_conf" in df.columns else np.ones(len(df))
         optical = np.array([_norm_label(v, classes) for v in df["optical_class"]], dtype=object)
@@ -125,10 +157,15 @@ def load_session(path: Path, cfg: dict) -> Session:
 
     target_fs = float(cfg["sample_rate_hz"])
     raw32, fs, resampled_n = to_rate(raw.astype(np.float32), t, target_fs)
+    pose_names = pose_target_names(cfg)
+    pose, pose_conf = _pose_arrays(df, pose_names)
     warnings = []
     if resampled_n is not None:
-        idx = np.linspace(0, len(labels) - 1, resampled_n)
-        labels = labels[np.clip(np.round(idx).astype(int), 0, len(labels) - 1)]
+        idx = np.clip(np.round(np.linspace(0, len(labels) - 1, resampled_n)).astype(int), 0, len(labels) - 1)
+        labels = labels[idx]
+        if pose is not None:
+            pose = pose[idx]
+            pose_conf = pose_conf[idx]
         warnings.append(f"resampled toward {target_fs:.0f} Hz")
     elif abs(fs - target_fs) / target_fs > 0.005:
         warnings.append(f"sample rate {fs:.1f} Hz, filtered as {target_fs:.0f}")
@@ -140,6 +177,9 @@ def load_session(path: Path, cfg: dict) -> Session:
         filtered = filtered[warmup:]
         labels = labels[warmup:]
         raw32 = raw32[warmup:]
+        if pose is not None:
+            pose = pose[warmup:]
+            pose_conf = pose_conf[warmup:]
 
     forced = {int(c) for c in cfg.get("drop_channels") or []}
     hard = []
@@ -184,6 +224,9 @@ def load_session(path: Path, cfg: dict) -> Session:
         n_raw=n_raw,
         n_used=int(len(scaled)),
         warnings=warnings,
+        pose=None if pose is None else pose.astype(np.float32),
+        pose_conf=None if pose_conf is None else pose_conf.astype(np.float32),
+        pose_names=pose_names if pose is not None else [],
     )
 
 

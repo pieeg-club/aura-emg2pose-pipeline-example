@@ -70,7 +70,7 @@ def write_contract(path: Path, cfg: dict, mask: list[bool], split: dict[str, lis
         "preprocess": {
             "in_graph": False,
             "unit": "microvolts, then per-channel robust scale",
-            "scale": "median(abs(x)) / 0.6745, floor 1e-6, computed on the live calibration window",
+            "scale": "median(abs(x)) / 0.6745, floor 1e-6, per recording over the filtered signal",
             "filter": "causal sos: bandpass 20-120 order 4, bandstop 45-55 order 4, notch 100 Q=30",
             "note": "Apply the filter and scale before this model. Dropped channels may be left as-is; the graph zeros them.",
         },
