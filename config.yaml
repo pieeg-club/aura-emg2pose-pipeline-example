@@ -1,0 +1,56 @@
+# Paths are relative to this directory.
+# Put session xlsx or csv files in data/raw, then run: python train.py
+
+data_dir: data/raw
+# Used only when data/raw has no session files.
+fallback_data_dir: ../dataset
+
+sample_rate_hz: 250
+window_sec: 1.0
+hop_sec: 0.1
+# Samples within this many seconds of a label change are unlabeled.
+edge_trim_sec: 0.2
+min_label_fraction: 0.9
+
+# ONNX output index 0 is rest. Do not reorder.
+classes:
+  - rest
+  - fist
+  - open
+  - pinch
+  - point
+  - thumb-up
+
+# 1-based channel numbers to force off, in addition to hard QC failures.
+drop_channels: []
+auto_drop_hard_failures: true
+# Zero a channel in the exported graph if it hard-fails in at least this fraction of train and validation files.
+global_drop_fraction: 0.5
+
+# Optical columns are last-value holds on the EMG clock. Left off unless that rate has been checked.
+drop_optical_disagreement: false
+optical_conf_min: 0.6
+
+# Causal filter applied before the network. Not baked into the ONNX graph.
+bandpass_hz: [20, 120]
+bandpass_order: 4
+notch_mains_hz: 50
+notch_harmonic_hz: 100
+notch_q: 30
+
+epochs: 40
+batch_size: 64
+lr: 0.001
+weight_decay: 0.0001
+patience: 8
+seed: 7
+
+# Split unit is the session file. Fractions apply only when the three lists are empty.
+# Paste names from runs/<timestamp>/split.json to freeze an assignment.
+# Unlisted files are appended to train.
+val_fraction: 0.2
+test_fraction: 0.2
+train_sessions: []
+val_sessions: []
+test_sessions: []
+loso: false

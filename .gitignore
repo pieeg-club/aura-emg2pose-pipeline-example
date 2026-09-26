@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+Thumbs.db
+
+# Recordings stay local. Copy them into data/raw/ to train.
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/README.md
+
+# Each train writes a folder here. The code is the repo; the weights are a run.
+runs/*
+!runs/.gitkeep
