@@ -42,6 +42,15 @@ def write_report(path: Path, summary: dict) -> None:
         f"- Epoch kept: {summary['ship_epochs']}",
         f"- Device: {summary['device']}",
         f"- ONNX: `{summary['onnx']}`",
+    ]
+    extra = []
+    if summary.get("session_balanced"):
+        extra.append("- Session-balanced sampler: yes")
+    if summary.get("window_sec") not in (None, 1.0):
+        extra.append(f"- Window: {summary['window_sec']} s")
+    if extra:
+        lines[11:11] = extra
+    lines += [
         "",
         "## Train class counts",
         "",

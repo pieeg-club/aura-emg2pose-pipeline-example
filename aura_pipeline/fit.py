@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, WeightedRandomSampler
 
 from .model import AuraNet
 
@@ -38,9 +38,34 @@ def confusion(y_true: np.ndarray, y_pred: np.ndarray, n_classes: int) -> np.ndar
     return mat
 
 
-def _loader(x: np.ndarray, y: np.ndarray, batch: int, shuffle: bool) -> DataLoader:
+def session_sample_weights(session_lengths: list[int]) -> np.ndarray:
+    """Per-window weights so each session has equal mass, regardless of window count."""
+    weights = []
+    for n in session_lengths:
+        if n <= 0:
+            continue
+        weights.append(np.full(n, 1.0 / n, dtype=np.float64))
+    if not weights:
+        return np.empty((0,), np.float64)
+    return np.concatenate(weights)
+
+
+def _loader(
+    x: np.ndarray,
+    y: np.ndarray,
+    batch: int,
+    shuffle: bool,
+    sample_weights: np.ndarray | None = None,
+) -> DataLoader:
     ds = TensorDataset(torch.from_numpy(x), torch.from_numpy(y))
-    return DataLoader(ds, batch_size=batch, shuffle=shuffle)
+    if sample_weights is None:
+        return DataLoader(ds, batch_size=batch, shuffle=shuffle)
+    sampler = WeightedRandomSampler(
+        torch.as_tensor(sample_weights, dtype=torch.double),
+        num_samples=len(sample_weights),
+        replacement=True,
+    )
+    return DataLoader(ds, batch_size=batch, sampler=sampler)
 
 
 @torch.no_grad()
@@ -62,6 +87,7 @@ def train_model(
     cfg: dict,
     channel_mask: list[bool],
     epochs: int | None = None,
+    sample_weights: np.ndarray | None = None,
 ) -> tuple[AuraNet, dict]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     n_classes = len(cfg["classes"])
@@ -78,7 +104,13 @@ def train_model(
         weight_decay=float(cfg["weight_decay"]),
     )
     loss_fn = nn.CrossEntropyLoss(weight=class_weights(y_train, n_classes).to(device))
-    loader = _loader(x_train, y_train, int(cfg["batch_size"]), shuffle=True)
+    loader = _loader(
+        x_train,
+        y_train,
+        int(cfg["batch_size"]),
+        shuffle=True,
+        sample_weights=sample_weights,
+    )
     max_epochs = int(epochs if epochs is not None else cfg["epochs"])
     patience = int(cfg["patience"])
     best_state = None
