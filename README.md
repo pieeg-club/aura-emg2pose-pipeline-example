@@ -1,4 +1,4 @@
-# Aura hand EMG
+# Aura wrist EMG training pipeline example
 
 Baseline pipeline for the Aura hand-EMG Kaggle competition. Aura is an 8-channel surface-EMG wristband ([aura.pieeg.com](https://aura.pieeg.com/)). One session file in, one ONNX model out. Two targets from the same recordings.
 
