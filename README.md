@@ -1,6 +1,6 @@
 # Aura hand EMG
 
-Baseline pipeline for the Aura hand-EMG Kaggle competition. Aura is an 8-channel surface-EMG device worn on the palm, and the competition dataset is recorded from it. One session file goes in and one ONNX model comes out. Two targets are trained from the same recordings:
+Baseline pipeline for the Aura hand-EMG Kaggle competition. Aura is an 8-channel surface-EMG wristband ([aura.pieeg.com](https://aura.pieeg.com/)), and the competition dataset is recorded from it. One session file goes in and one ONNX model comes out. Two targets are trained from the same recordings:
 
 - Gesture classifier: six classes, rest, fist, open, pinch, point, thumb-up (`python train.py`).
 - Hand-pose regressor: seven continuous DoF, the five per-finger curls plus pinch and openness (`python train.py --pose`).
