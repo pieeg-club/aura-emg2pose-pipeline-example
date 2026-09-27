@@ -2,7 +2,7 @@
 
 Baseline pipeline for the Aura hand-EMG Kaggle competition. Aura is an 8-channel surface-EMG wristband ([aura.pieeg.com](https://aura.pieeg.com/)). One session file in, one ONNX model out. Two targets from the same recordings.
 
-`Python 3.12` · `250 Hz` · `8 ch` · `window 1.0 s` · `ONNX`
+`Python 3.10+` · `250 Hz` · `8 ch` · `window 1.0 s` · `ONNX`
 
 | Target | Command | Graph | Output |
 | --- | --- | --- | --- |
@@ -41,7 +41,7 @@ flowchart LR
 
 ## Quick start
 
-Python 3.12.
+Python 3.10+.
 
 ```powershell
 py -3 -m venv .venv
