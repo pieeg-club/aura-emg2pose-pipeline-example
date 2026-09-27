@@ -297,6 +297,7 @@ def write_pose_report(
         f"- Test mean r: {_fmt(test_metrics['r']) if test_metrics else 'n/a'}",
         f"- Epoch kept: {info['best_epoch']}",
         f"- Device: {info['device']}",
+        f"- Window: {counts.get('window_sec', 1.0)} s",
         "",
         "## Per-DoF test error",
         "",
@@ -353,7 +354,12 @@ def run_pose(sessions, cfg: dict, out: Path, split: dict, mask: list[bool]) -> i
     x_te, y_te, w_te = gather("test")
     if not len(x_tr):
         raise SystemExit("No pose training windows. Lower pose_min_conf or check the optical columns.")
-    counts = {"train": int(len(x_tr)), "val": int(len(x_val)), "test": int(len(x_te))}
+    counts = {
+        "train": int(len(x_tr)),
+        "val": int(len(x_val)),
+        "test": int(len(x_te)),
+        "window_sec": float(cfg["window_sec"]),
+    }
     print(f"pose windows  train={counts['train']}  val={counts['val']}  test={counts['test']}", flush=True)
 
     set_seed(int(cfg["seed"]))

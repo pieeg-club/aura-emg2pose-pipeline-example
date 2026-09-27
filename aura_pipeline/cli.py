@@ -12,7 +12,14 @@ import torch
 from .config import ROOT, load_config, resolve_dir
 from .data import apply_mask, discover, global_mask, load_session, make_windows
 from .export import export_onnx, write_contract
-from .fit import balanced_accuracy, confusion, predict, set_seed, train_model
+from .fit import (
+    balanced_accuracy,
+    confusion,
+    predict,
+    session_sample_weights,
+    set_seed,
+    train_model,
+)
 from .report import write_qc, write_report
 from .split import assign_sessions
 
@@ -28,6 +35,12 @@ def _parse(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--loso", action="store_true", help="Also score leave-one-session-out. Slow.")
     p.add_argument("--pose", action="store_true", help="Train continuous hand-pose regression, not the classifier.")
     p.add_argument("--epochs", type=int, default=None)
+    p.add_argument("--window-sec", type=float, default=None, help="Override config window_sec for this run.")
+    p.add_argument(
+        "--session-balanced",
+        action="store_true",
+        help="Draw train windows so each session has equal mass. Classifier only.",
+    )
     p.add_argument("--test", action="append", default=None, help="Pin a session into the test split. Repeatable.")
     return p.parse_args(argv)
 
@@ -139,6 +152,10 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config(args.config)
     if args.epochs is not None:
         cfg["epochs"] = args.epochs
+    if args.window_sec is not None:
+        cfg["window_sec"] = float(args.window_sec)
+    if args.session_balanced:
+        cfg["session_balanced"] = True
     if args.loso:
         cfg["loso"] = True
     if args.test:
@@ -192,9 +209,18 @@ def main(argv: list[str] | None = None) -> int:
     _check_classes(y_tr, cfg["classes"])
     counts = {name: int(np.sum(y_tr == i)) for i, name in enumerate(cfg["classes"])}
     print("train windows " + ", ".join(f"{k}={v}" for k, v in counts.items()), flush=True)
+    sample_weights = None
+    if cfg.get("session_balanced"):
+        train_lengths = [len(ys[i]) for i in [names.index(n) for n in split["train"]]]
+        sample_weights = session_sample_weights(train_lengths)
+        print(
+            "session-balanced sampler on "
+            + ", ".join(f"{n}={k}" for n, k in zip(split["train"], train_lengths)),
+            flush=True,
+        )
 
     set_seed(int(cfg["seed"]))
-    model, info = train_model(x_tr, y_tr, x_val, y_val, cfg, mask)
+    model, info = train_model(x_tr, y_tr, x_val, y_val, cfg, mask, sample_weights=sample_weights)
     device = next(model.parameters()).device
     val_pred = predict(model, x_val, int(cfg["batch_size"]), device)
     val_score = balanced_accuracy(y_val, val_pred, len(cfg["classes"]))
@@ -246,6 +272,8 @@ def main(argv: list[str] | None = None) -> int:
         "device": info["device"],
         "onnx": str(onnx_path),
         "channel_keep": mask,
+        "session_balanced": bool(cfg.get("session_balanced")),
+        "window_sec": float(cfg["window_sec"]),
         "warnings": [w for s in sessions for w in s.warnings],
     }
     write_report(out / "report.md", summary)
