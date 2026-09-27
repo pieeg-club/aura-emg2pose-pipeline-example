@@ -245,7 +245,7 @@ def main(argv: list[str] | None = None) -> int:
             score = balanced_accuracy(ys[i], pred, len(cfg["classes"]))
             scores.append({"session": name, "balanced_accuracy": score})
             print(f"  {name} {score:.3f}", flush=True)
-        (out / "loso.json").write_text(json.dumps(scores, indent=2), encoding="utf-8")
+            (out / "loso.json").write_text(json.dumps(scores, indent=2), encoding="utf-8")
 
     onnx_path = out / "model.onnx"
     export_onnx(model, onnx_path, cfg["classes"])

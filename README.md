@@ -102,6 +102,19 @@ python infer.py runs\RUN\model.onnx
 
 `--qc-only` writes the channel table and does not train. `--pose` trains the hand-pose regressor instead of the classifier and writes `pose.onnx` beside the other artifacts. `--self-test` trains for one epoch on synthetic tensors and checks that the ONNX file loads. It does not read `data/raw/`.
 
+## Hardware
+
+AuraNet is a small temporal-spatial CNN (8 channels, 1 s window). One `python train.py` run is fine on CPU. `--loso` is 12 extra trains on the train+val sessions (test stays sealed), each for the shipped epoch count, so it is slow on CPU. The network is not large; a free T4 is enough.
+
+| Budget | Where | Notes |
+| --- | --- | --- |
+| $0 | Kaggle notebook, GPU on | ~30 GPU hours/week. Best free option for this competition. |
+| $0 | Colab, Runtime > GPU (T4 if assigned) | Works. GPU is not guaranteed. Idle disconnect. [notebooks/loso.ipynb](notebooks/loso.ipynb) |
+| $0 | This machine, CPU | Single train: yes. LOSO: hours. Do not start it here. |
+| ~$1 | Any rented T4 / RTX, SSH | One LOSO job. |
+
+Do not `pip install torch` on Colab or Kaggle. Those runtimes already ship CUDA PyTorch; a pip torch often replaces it with CPU. Install the rest from `requirements.txt`. Session files are ~104 MB and are not in git: put them in `data/raw/` (upload, Drive, or Kaggle dataset). `loso.json` is written after each fold so a dropped session still keeps completed scores.
+
 `infer.py` is the classifier caller. It loads `model.onnx`, runs a mock 1 s buffer through the same causal filter and per-channel scale as training, and prints class probabilities. Filter, scale, and the 0.5 s warmup are not in the graph. Copy this file; do not feed raw microvolts to ONNX. With no path it uses `runs/latest.txt` if that run has `model.onnx`, otherwise the newest `runs/*/model.onnx`.
 
 ## Run artifacts

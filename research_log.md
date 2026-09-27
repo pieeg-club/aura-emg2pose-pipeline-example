@@ -11,7 +11,7 @@ Current pose baseline is 0.5 s, one seed: [20260927_103801](runs/20260927_103801
 | Q | Measurement | Interpretation |
 | --- | --- | --- |
 | 1. One or two bad test sessions? | 5=77.9% (n=583), 12=57.8% (n=558), 15=43.3% (n=536). Drop-15 remaining 67.8%. Failure modes differ by session. | Large held-out-session heterogeneity. EMG session shift is consistent with this, not isolated from label mix, recording quality, or optical/guided timing. LOSO + per-session QC needed. |
-| 2. LOSO variance? | Not run. 12 folds x 32 epochs on CPU. | Blocked. GPU/SSH. |
+| 2. LOSO variance? | Not run. 12 folds x 32 epochs on this CPU. AuraNet is small; a free T4 is enough. | Blocked here. Use Kaggle GPU, Colab T4, or a rented box. See README Hardware. |
 | 3. Pinch under 1 s formulation? | Model pinch MAE 0.205, r=0.015 vs constant-0 MAE 0.176. Train pinch: median 0, lag-1 held ~70%. | Current 1 s formulation does not learn pinch better than the constant baseline. |
 | 4. 0.5 s pose window? | One run. MAE 0.126 -> 0.122, r 0.47 -> 0.52, pinch r 0.015 -> 0.29, pinch MAE 0.176 (const 0) -> 0.172. Index r 0.44 -> 0.37. | Pinch is weakly learnable at 0.5 s. Consistent with 1 s aggregation smearing a dynamic target. Not a multi-seed result. |
 | 5. This session-balanced sampler? | Test 48.1% vs 60.5%. Stopped epoch 8 (baseline best=32). Thumb-up recall 75% -> 28%, fist 58% -> 43%, rest 42% -> 55%. | Failed implementation. Do not use this sampler. Does not show that session balancing is generally harmful. |
@@ -43,7 +43,7 @@ Pose baseline (freeze except the next one-factor change): window 0.5 s, hop 0.1 
 - `--session-balanced` as implemented changed decision boundaries and stopped at epoch 8. Logged as a failed run of this sampler.
 - Pinch at 1 s is primarily a target/windowing problem under the current formulation: sparse target, ~70% held, and the model loses to the constant baseline. At 0.5 s pinch is weakly learnable (r=0.29; MAE 0.172 vs 0.176). Not solved.
 - Next pose factor: 0.25 s vs 0.5 s, same everything else. Temporal optimum before GRUs, multitask, or pretraining.
-- LOSO not run on CPU. Ask for GPU.
+- LOSO not run on this CPU. A free T4 (Kaggle first, then Colab) is enough for this net. Do not grind 12 folds locally.
 
 ## How to add a run
 
@@ -72,7 +72,7 @@ Note only deltas in run rows.
 | 2026-09-27 | [20260927_103801](runs/20260927_103801/pose_report.md) | pose | `python train.py --pose --window-sec 0.5` | 33/40 | MAE 0.092 | MAE 0.122, r 0.52 | Pinch r 0.29. New pose baseline; one seed. |
 | 2026-09-27 | [20260927_092039](runs/20260927_092039/per_test_session.json) | clf score | no retrain; per-test-session | 32 | - | 12=57.8 / 5=77.9 / 15=43.3 | Held-out sessions heterogeneous; not one file. |
 | 2026-09-27 | [20260926_160145](runs/20260926_160145/pose_baseline.json) | pose score | median / const-0, no retrain | - | - | MAE 0.140; pinch 0.176 | 1 s model pinch MAE 0.205, worse than const-0. |
-| 2026-09-27 | - | clf LOSO | `python train.py --loso` | - | - | - | Not run. CPU. Need GPU. |
+| 2026-09-27 | - | clf LOSO | `python train.py --loso` | - | - | - | Not run here. Free T4 (Kaggle/Colab) is enough. |
 | 2026-09-27 | [20260927_092039](runs/20260927_092039/report.md) | clf | `python train.py` | 32/40 | 74.2% | 60.5% | Current clf. rest/open vs pinch; point vs thumb-up. |
 | 2026-09-26 | [20260926_160145](runs/20260926_160145/pose_report.md) | pose | `python train.py --pose` | 3/40 | MAE 0.101 | MAE 0.126, r 0.47 | Pinch r 0.015. Early stop. |
 | 2026-09-26 | [20260926_140200](runs/20260926_140200/report.md) | clf | `python train.py` | 2/40 | 37.3% | 32.1% | Epoch-2 stop. Superseded. |
