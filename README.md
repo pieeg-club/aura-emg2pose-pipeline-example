@@ -7,6 +7,8 @@ Baseline pipeline for the Aura hand-EMG Kaggle competition. Aura is an 8-channel
 
 This directory is the working tree. Run every command from here.
 
+Training runs: [research_log.md](research_log.md).
+
 ## Data
 
 Place one file per session in `data/raw/`. Accepted formats are `.xlsx` (first sheet) and `.csv`. Excel lock files (`~$*`) are ignored.
@@ -161,6 +163,7 @@ config.yaml          training and split configuration
 train.py             entry point
 infer.py             one-window ONNX caller (filter and scale outside the graph)
 aura_pipeline/       load, QC, windows, model, fit, export, pose
+research_log.md      training index
 data/raw/            session files
 runs/                outputs, gitignored
 ```
