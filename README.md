@@ -1,13 +1,79 @@
 # Aura hand EMG
 
-Baseline pipeline for the Aura hand-EMG Kaggle competition. Aura is an 8-channel surface-EMG wristband ([aura.pieeg.com](https://aura.pieeg.com/)), and the competition dataset is recorded from it. One session file goes in and one ONNX model comes out. Two targets are trained from the same recordings:
+Baseline pipeline for the Aura hand-EMG Kaggle competition. Aura is an 8-channel surface-EMG wristband ([aura.pieeg.com](https://aura.pieeg.com/)). One session file in, one ONNX model out. Two targets from the same recordings.
 
-- Gesture classifier: six classes, rest, fist, open, pinch, point, thumb-up (`python train.py`).
-- Hand-pose regressor: seven continuous DoF, the five per-finger curls plus pinch and openness (`python train.py --pose`).
+`Python 3.12` · `250 Hz` · `8 ch` · `window 1.0 s` · `ONNX`
 
-This directory is the working tree. Run every command from here.
+| Target | Command | Graph | Output |
+| --- | --- | --- | --- |
+| Gesture, 6 class | `python train.py` | `model.onnx` | softmax: rest, fist, open, pinch, point, thumb-up |
+| Hand pose, 7 DoF | `python train.py --pose` | `pose.onnx` | `[0, 1]`: five finger curls, pinch, openness |
 
-Training runs: [research_log.md](research_log.md).
+This directory is the working tree. Run every command from here. Training index: [research_log.md](research_log.md).
+
+> Filter, per-channel scale, and the 0.5 s warmup live **outside** the graph. Do not feed raw microvolts to ONNX. Copy `infer.py`.
+
+```mermaid
+flowchart LR
+  A["session .xlsx / .csv"] --> B["causal filter + scale"]
+  B --> C["1 s windows, hop 0.1 s"]
+  C --> D["AuraNet"]
+  D --> E["model.onnx"]
+  D --> F["pose.onnx"]
+```
+
+## Index
+
+| | Section | Contents |
+| --- | --- | --- |
+| ⚡ | [Quick start](#quick-start) | venv, first train |
+| ⌨️ | [Commands](#commands) | train, pose, loso, infer |
+| 📁 | [Data](#data) | columns, labels, pose targets |
+| ⚙️ | [Method](#method) | filter, windows, QC, AuraNet |
+| 🤚 | [Pose regression](#pose-regression) | 7-DoF optical target |
+| ✂️ | [Split](#split) | session-level, LOSO |
+| 💻 | [Hardware](#hardware) | CPU vs T4 |
+| 📦 | [Run artifacts](#run-artifacts) | `runs/<timestamp>/` |
+| 🔌 | [Inference contract](#inference-contract) | `model.onnx` I/O |
+| 📏 | [Pose inference contract](#pose-inference-contract) | `pose.onnx` I/O |
+| 🗂️ | [Layout](#layout) | files |
+| 🔧 | [Configuration](#configuration) | `config.yaml` |
+
+## Quick start
+
+Python 3.12.
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+Put one file per session in `data/raw/` (`.xlsx` or `.csv`). Then:
+
+```powershell
+python train.py --qc-only
+python train.py
+python infer.py
+```
+
+Dependencies: NumPy, pandas, openpyxl, SciPy, PyYAML, PyTorch, ONNX, ONNX Runtime.
+
+`--qc-only` writes the channel table and does not train. `--self-test` trains for one epoch on synthetic tensors and checks that the ONNX file loads. It does not read `data/raw/`.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `python train.py --qc-only` | Channel QC only. No fit. |
+| `python train.py` | 6-class classifier → `model.onnx` |
+| `python train.py --pose` | 7-DoF pose regressor → `pose.onnx` |
+| `python train.py --data D:\more-sessions` | Read sessions from another folder |
+| `python train.py --test multimodal_15` | Pin the test session |
+| `python train.py --loso` | Leave-one-session-out on train+val. Test stays sealed. Does not replace `model.onnx` |
+| `python train.py --self-test` | One synthetic epoch. No `data/raw/` |
+| `python infer.py` | One-window ONNX caller (latest `model.onnx`) |
+| `python infer.py runs\RUN\model.onnx` | Same, explicit graph |
 
 ## Data
 
@@ -74,34 +140,6 @@ With the session lists in `config.yaml` empty, files are shuffled with `seed` an
 
 The reported test metric is balanced accuracy. Rest is the majority class, so unweighted accuracy is not the selection metric.
 
-## Setup
-
-Python 3.12.
-
-```powershell
-py -3 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-```
-
-Dependencies: NumPy, pandas, openpyxl, SciPy, PyYAML, PyTorch, ONNX, ONNX Runtime.
-
-## Commands
-
-```powershell
-python train.py --qc-only
-python train.py
-python train.py --pose
-python train.py --data D:\more-sessions
-python train.py --test multimodal_15
-python train.py --loso
-python train.py --self-test
-python infer.py
-python infer.py runs\RUN\model.onnx
-```
-
-`--qc-only` writes the channel table and does not train. `--pose` trains the hand-pose regressor instead of the classifier and writes `pose.onnx` beside the other artifacts. `--self-test` trains for one epoch on synthetic tensors and checks that the ONNX file loads. It does not read `data/raw/`.
-
 ## Hardware
 
 AuraNet is a small temporal-spatial CNN (8 channels, 1 s window). One `python train.py` run is fine on CPU. `--loso` is 12 extra trains on the train+val sessions (test stays sealed), each for the shipped epoch count, so it is slow on CPU. The network is not large; a free T4 is enough.
@@ -114,8 +152,6 @@ AuraNet is a small temporal-spatial CNN (8 channels, 1 s window). One `python tr
 | ~$1 | Any rented T4 / RTX, SSH | One LOSO job. |
 
 Do not `pip install torch` on Colab or Kaggle. Those runtimes already ship CUDA PyTorch; a pip torch often replaces it with CPU. Install the rest from `requirements.txt`. Session files are ~104 MB and are not in git: put them in `data/raw/` (upload, Drive, or Kaggle dataset). `loso.json` is written after each fold so a dropped session still keeps completed scores.
-
-`infer.py` is the classifier caller. It loads `model.onnx`, runs a mock 1 s buffer through the same causal filter and per-channel scale as training, and prints class probabilities. Filter, scale, and the 0.5 s warmup are not in the graph. Copy this file; do not feed raw microvolts to ONNX. With no path it uses `runs/latest.txt` if that run has `model.onnx`, otherwise the newest `runs/*/model.onnx`.
 
 ## Run artifacts
 
@@ -153,6 +189,8 @@ Each training writes `runs/<timestamp>/`. `runs/latest.txt` stores that path.
 python infer.py
 python infer.py runs\RUN\model.onnx
 ```
+
+`infer.py` loads `model.onnx`, runs a mock 1 s buffer through the same causal filter and per-channel scale as training, and prints class probabilities. With no path it uses `runs/latest.txt` if that run has `model.onnx`, otherwise the newest `runs/*/model.onnx`.
 
 The mock buffer is synthetic EMG in microvolts. Scale is computed on that 1 s window; training uses the full recording. A live caller should keep SOS filter state across hops instead of re-applying the 0.5 s warmup every window.
 
